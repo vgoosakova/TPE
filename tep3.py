@@ -165,7 +165,7 @@ def main(n, m):
     F_p = kriteriy_fishera(y, y_aver, y_new, n, m, d)
 
     fisher = partial(f.ppf, q=1 - 0.05)
-    f_t = fisher(dfn=f4, dfd=f3) # табличне знач
+    f_t = fisher(dfn=f4, dfd=f3)  # табличне знач
 
     print('\nПеревірка адекватності за критерієм Фішера')
     print('Fp =', F_p)
@@ -177,4 +177,4 @@ def main(n, m):
 
 
 if __name__ == '__main__':
-    main(4, 4)
+    main(4, 4)  # 124 стрічка ми реалізуємо функцію main та передаємо їй 2 аргументи: n і m , на 180 ми викликаємо цю функцію та передаємо значення цих аргументів як 4 і 4
