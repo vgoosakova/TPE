@@ -102,7 +102,7 @@ def kriteriy_studenta(x, y_average, n, m, dispersion):
 
     beta = [sum(1 * y for y in y_average) / n]
     for i in range(3):
-        b = sum(j[0] * j[1] for j in zip(x[:,i], y_average)) / n
+        b = sum(j[0] * j[1] for j in zip(x[:, i], y_average)) / n
         beta.append(b)
 
     t = [round(abs(b) / s_beta_s, 3) for b in beta]
@@ -111,14 +111,13 @@ def kriteriy_studenta(x, y_average, n, m, dispersion):
 
 
 def kriteriy_fishera(y, y_average, y_new, n, m, d, dispersion):
-    S_ad = m / (n - d) * sum([(y_new[i] - y_average[i])**2 for i in range(len(y))])
+    S_ad = m / (n - d) * sum([(y_new[i] - y_average[i]) ** 2 for i in range(len(y))])
     dispersion_average = sum(dispersion) / n
 
     return S_ad / dispersion_average
 
 
 def check(X, Y, B, n, m, norm=False):
-
     f1 = m - 1
     f2 = n
     f3 = f1 * f2
@@ -142,7 +141,7 @@ def check(X, Y, B, n, m, norm=False):
 
     print(f'Gp = {Gp}')
     if Gp < cohren_cr_table:
-        print(f'З ймовірністю {1-q} дисперсії однорідні.')
+        print(f'З ймовірністю {1 - q} дисперсії однорідні.')
     else:
         print("Необхідно збільшити кількість дослідів")
         m += 1
@@ -202,10 +201,10 @@ def planning_matrix_linear(n, m, x_range):
                              [1, -1, 1, -1],
                              [1, 1, -1, -1],
                              [1, 1, 1, 1]])
-    y = np.zeros(shape=(n,m))
+    y = np.zeros(shape=(n, m))
     for i in range(n):
         for j in range(m):
-            y[i][j] = random.randint(y_min,y_max)
+            y[i][j] = random.randint(y_min, y_max)
 
     x_normalized = x_normalized[:len(y)]
 
@@ -213,11 +212,11 @@ def planning_matrix_linear(n, m, x_range):
     for i in range(len(x_normalized)):
         for j in range(1, len(x_normalized[i])):
             if x_normalized[i][j] == -1:
-                x[i][j] = x_range[j-1][0]
+                x[i][j] = x_range[j - 1][0]
             else:
-                x[i][j] = x_range[j-1][1]
+                x[i][j] = x_range[j - 1][1]
 
-    print('\nМатриця планування:' )
+    print('\nМатриця планування:')
     print('\n    X0  X1   X2   X3   Y1   Y2   Y3  ')
     print(np.concatenate((x, y), axis=1))
 
@@ -275,7 +274,7 @@ def linear(n, m):
     print(f'Розрахункове значення: Gp = {Gp}'
           f'\nТабличне значення: Gt = {cohren_cr_table}')
     if Gp < cohren_cr_table:
-        print(f'З ймовірністю {1-q} дисперсії однорідні.')
+        print(f'З ймовірністю {1 - q} дисперсії однорідні.')
     else:
         print("Необхідно збільшити ксть дослідів")
         m += 1
@@ -283,7 +282,7 @@ def linear(n, m):
 
     qq = (1 + 0.95) / 2
     student_cr_table = t.ppf(df=f3, q=qq)
-    student_t = kriteriy_studenta(x_norm[:,1:], y_average, n, m, dispersion_arr)
+    student_t = kriteriy_studenta(x_norm[:, 1:], y_average, n, m, dispersion_arr)
 
     print('\nТабличне значення критерій Стьюдента:\n', student_cr_table)
     print('Розрахункове значення критерій Стьюдента:\n', student_t)
@@ -294,7 +293,8 @@ def linear(n, m):
 
     y_new = []
     for j in range(n):
-        y_new.append(regression([x[j][student_t.index(i)] for i in student_t if i in res_student_t], final_coefficients))
+        y_new.append(
+            regression([x[j][student_t.index(i)] for i in student_t if i in res_student_t], final_coefficients))
 
     print(f'\nОтримаємо значення рівння регресії для {m} дослідів: ')
     print(y_new)
