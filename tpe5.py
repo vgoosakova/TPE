@@ -3,7 +3,16 @@ import sklearn.linear_model as lm
 from scipy.stats import f, t
 from functools import partial
 from pyDOE2 import *
+from time import time
 
+def timeit(func):
+    def wrapper(*args, **kwargs):
+        start = time()
+        result = func(*args, **kwargs)
+        end = (time() - start) * 1000
+        print(f'Час виконання: {end:.3f} мс')
+        return result
+    return wrapper
 
 def regression(x, b):
     y = sum([x[i] * b[i] for i in range(len(x))])
@@ -114,7 +123,7 @@ def find_coef(X, Y, norm=False):
     print('\nРезультат рівняння зі знайденими коефіцієнтами:\n', np.dot(X, B))
     return B
 
-
+@timeit
 def kriteriy_cochrana(y, y_aver, n, m):
     f1 = m - 1
     f2 = n
@@ -131,7 +140,7 @@ def cohren(f1, f2, q=0.05):
     return fisher_value / (fisher_value + f1 - 1)
 
 
-def bs(x, y_aver, n):
+def bs(x, y_aver, n):  # метод для оцінки коефіцієнтів
     res = [sum(1 * y for y in y_aver) / n]
 
     for i in range(len(x[0])):
@@ -139,7 +148,7 @@ def bs(x, y_aver, n):
         res.append(b)
     return res
 
-
+@timeit
 def kriteriy_studenta(x, y, y_aver, n, m):
     S_kv = s_kv(y, y_aver, n, m)
     s_kv_aver = sum(S_kv) / n
@@ -150,7 +159,7 @@ def kriteriy_studenta(x, y, y_aver, n, m):
 
     return ts
 
-
+@timeit
 def kriteriy_fishera(y, y_aver, y_new, n, m, d):
     S_ad = m / (n - d) * sum([(y_new[i] - y_aver[i]) ** 2 for i in range(len(y))])
     S_kv = s_kv(y, y_aver, n, m)
