@@ -1,183 +1,308 @@
-import numpy as np
-import random
-from numpy.linalg import solve
-from scipy.stats import f, t
-from functools import partial
-
-x_range = [(10, 40), (-15, 35), (-15, 5)]
-x_aver_max = (40 + 35 + 5)/ 3
-x_aver_min = (10 - 15 - 15) / 3
-
-y_max = 200 + int(x_aver_max)
-y_min = 200 + int(x_aver_min)
+from math import fabs, sqrt
+import time
 
 
-def regression(x, b):
-    y = sum([x[i]*b[i] for i in range(len(x))])
-    return y
+m = 2
+p = 0.95
+N = 15
+x1_min = 10
+x1_max = 40
+x2_min = -15
+x2_max = 35
+x3_min = -15
+x3_max = 5
+x01 = (x1_max + x1_min) / 2
+x02 = (x2_max + x2_min) / 2
+x03 = (x3_max + x3_min) / 2
+delta_x1 = x1_max - x01
+delta_x2 = x2_max - x02
+delta_x3 = x3_max - x03
+
+average_y = None
+matrix = None
+dispersion_b2 = None
+student_lst = None
+d = None
+q = None
+f3 = None
 
 
-def plan_matrix(n, m):
-    y = np.zeros(shape=(n, m))
-    for i in range(n):
-        for j in range(m):
-            y[i][j] = random.randint(y_min, y_max)
-    x_norm = np.array([[1, -1, -1, -1],
-                  [1, -1, 1, 1],
-                  [1, 1, -1, 1],
-                  [1, 1, 1, -1],
-                  [1, -1, -1, 1],
-                  [1, -1, 1, -1],
-                  [1, 1, -1, -1],
-                  [1, 1, 1, 1]])
-    x_norm = x_norm[:len(y)]
+def x(l1, l2, l3):
+    x_1 = l1 * delta_x1 + x01
+    x_2 = l2 * delta_x2 + x02
+    x_3 = l3 * delta_x3 + x03
+    return [x_1, x_2, x_3]
 
-    x = np.ones(shape=(len(x_norm), len(x_norm[0])))
-    for i in range(len(x_norm)):
-        for j in range(1, len(x_norm[i])):
-            if x_norm[i][j] == -1:
-                x[i][j] = x_range[j-1][0]
+
+matrix_pfe = [
+    [-1, -1, -1, +1, +1, +1, -1, +1, +1, +1],
+    [-1, -1, +1, +1, -1, -1, +1, +1, +1, +1],
+    [-1, +1, -1, -1, +1, -1, +1, +1, +1, +1],
+    [-1, +1, +1, -1, -1, +1, -1, +1, +1, +1],
+    [+1, -1, -1, -1, -1, +1, +1, +1, +1, +1],
+    [+1, -1, +1, -1, +1, -1, -1, +1, +1, +1],
+    [+1, +1, -1, +1, -1, -1, -1, +1, +1, +1],
+    [+1, +1, +1, +1, +1, +1, +1, +1, +1, +1],
+    [-1.73, 0, 0, 0, 0, 0, 0, 2.9929, 0, 0],
+    [+1.73, 0, 0, 0, 0, 0, 0, 2.9929, 0, 0],
+    [0, -1.73, 0, 0, 0, 0, 0, 0, 2.9929, 0],
+    [0, +1.73, 0, 0, 0, 0, 0, 0, 2.9929, 0],
+    [0, 0, -1.73, 0, 0, 0, 0, 0, 0, 2.9929],
+    [0, 0, +1.73, 0, 0, 0, 0, 0, 0, 2.9929],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+]
+
+matrix_x = [[] for x in range(N)]
+for i in range(len(matrix_x)):
+    if i < 8:
+        x_1 = x1_min if matrix_pfe[i][0] == -1 else x1_max
+        x_2 = x2_min if matrix_pfe[i][1] == -1 else x2_max
+        x_3 = x3_min if matrix_pfe[i][2] == -1 else x3_max
+    else:
+        x_lst = x(matrix_pfe[i][0], matrix_pfe[i][1], matrix_pfe[i][2])
+        x_1, x_2, x_3 = x_lst
+    matrix_x[i] = [x_1, x_2, x_3, x_1 * x_2, x_1 * x_3, x_2 *
+                   x_3, x_1 * x_2 * x_3, x_1 ** 2, x_2 ** 2, x_3 ** 2]
+
+
+class Perevirku:
+    def get_cohren_value(size_of_selections, qty_of_selections, significance):
+        from _pydecimal import Decimal
+        from scipy.stats import f
+        size_of_selections += 1
+        partResult1 = significance / (size_of_selections - 1)
+        params = [partResult1, qty_of_selections,
+                  (size_of_selections - 1 - 1) * qty_of_selections]
+        fisher = f.isf(*params)
+        result = fisher / (fisher + (size_of_selections - 1 - 1))
+        return Decimal(result).quantize(Decimal('.0001')).__float__()
+
+    def get_student_value(f3, significance):
+        from _pydecimal import Decimal
+        from scipy.stats import t
+        return Decimal(abs(
+            t.ppf(significance / 2, f3)
+        )).quantize(Decimal('.0001')).__float__()
+
+    def get_fisher_value(f3, f4, significance):
+        from _pydecimal import Decimal
+        from scipy.stats import f
+        return Decimal(
+            abs(f.isf(significance, f4, f3))
+        ).quantize(Decimal('.0001')).__float__()
+
+
+def generate_matrix():
+    def f(X1, X2, X3):
+        from random import randrange
+        y = 9.9 + 2.7 * X1 + 0.3 * X2 + 1.4 * X3 + 6.8 * X1 * X1 + \
+            0.6 * X2 * X2 + 3.9 * X3 * X3 + 1.6 * X1 * X2 + \
+            0.1 * X1 * X3 + 1.7 * X2 * X3 + 9.9 * \
+            X1 * X2 * X3 + randrange(0, 10) - 5
+        return y
+
+    matrix_with_y = [[f(matrix_x[j][0], matrix_x[j][1], matrix_x[j][2])
+                      for i in range(m)] for j in range(N)]
+    return matrix_with_y
+
+
+def find_average(lst, orientation):
+    average = []
+    if orientation == 1:
+        for rows in range(len(lst)):
+            average.append(sum(lst[rows]) / len(lst[rows]))
+    else:
+        for column in range(len(lst[0])):
+            number_lst = []
+            for rows in range(len(lst)):
+                number_lst.append(lst[rows][column])
+            average.append(sum(number_lst) / len(number_lst))
+    return average
+
+
+def a(first, second):
+    need_a = 0
+    for j in range(N):
+        need_a += matrix_x[j][first - 1] * matrix_x[j][second - 1] / N
+    return need_a
+
+
+def find_known(number):
+    need_a = 0
+    for j in range(N):
+        need_a += average_y[j] * matrix_x[j][number - 1] / 15
+    return need_a
+
+
+def solve(lst_1, lst_2):
+    from numpy.linalg import solve
+    solver = solve(lst_1, lst_2)
+    return solver
+
+
+def check_result(b_lst, k):
+    y_i = (b_lst[0] + b_lst[1] * matrix[k][0] + b_lst[2] * matrix[k][1]
+           + b_lst[3] * matrix[k][2] + b_lst[4] * matrix[k][3] + b_lst[5]
+           * matrix[k][4] + b_lst[6] * matrix[k][5] + b_lst[7] * matrix[k][6]
+           + b_lst[8] * matrix[k][7] + b_lst[9]
+           * matrix[k][8] + b_lst[10] * matrix[k][9])
+    return y_i
+
+
+def student_test(b_lst, number_x=10):
+    dispersion_b = sqrt(dispersion_b2)
+    for column in range(number_x + 1):
+        t_practice = 0
+        t_theoretical = Perevirku.get_student_value(f3, q)
+        for row in range(N):
+            if column == 0:
+                t_practice += average_y[row] / N
             else:
-                x[i][j] = x_range[j-1][1]
-
-    print('\nМатриця планування')
-    print(np.concatenate((x, y), axis=1))
-
-    return x, y, x_norm
+                t_practice += average_y[row] * matrix_pfe[row][column - 1]
+        if fabs(t_practice / dispersion_b) < t_theoretical:
+            b_lst[column] = 0
+    return b_lst
 
 
-def find_coefficient(x, y_aver, n):
-    mx1 = sum(x[:, 1]) / n
-    mx2 = sum(x[:, 2]) / n
-    mx3 = sum(x[:, 3]) / n
-    my = sum(y_aver) / n
-    a12 = sum([x[i][1] * x[i][2] for i in range(len(x))]) / n
-    a13 = sum([x[i][1] * x[i][3] for i in range(len(x))]) / n
-    a23 = sum([x[i][2] * x[i][3] for i in range(len(x))]) / n
-    a11 = sum([i ** 2 for i in x[:, 1]]) / n
-    a22 = sum([i ** 2 for i in x[:, 2]]) / n
-    a33 = sum([i ** 2 for i in x[:, 3]]) / n
-    a1 = sum([y_aver[i] * x[i][1] for i in range(len(x))]) / n
-    a2 = sum([y_aver[i] * x[i][2] for i in range(len(x))]) / n
-    a3 = sum([y_aver[i] * x[i][3] for i in range(len(x))]) / n
-
-    X = [[1, mx1, mx2, mx3], [mx1, a11, a12, a13], [mx2, a12, a22, a23], [mx3, a13, a23, a33]]
-    Y = [my, a1, a2, a3]
-    B = [round(i, 2) for i in solve(X, Y)]
-    print('\nРівняння регресії')
-    print(f'{B[0]} + {B[1]}*x1 + {B[2]}*x2 + {B[3]}*x3')
-
-    return B
+def fisher_test():
+    dispersion_ad = 0
+    f4 = N - d
+    for row in range(len(average_y)):
+        dispersion_ad += (m * (average_y[row] -
+                               check_result(student_lst, row))) / (N - d)
+    F_practice = dispersion_ad / dispersion_b2
+    F_theoretical = Perevirku.get_fisher_value(f3, f4, q)
+    return F_practice < F_theoretical
 
 
-# квадратна дисперсія
-def s_kv(y, y_aver, n, m):
-    res = []
-    for i in range(n):
-        s = sum([(y_aver[i] - y[i][j])**2 for j in range(m)]) / m
-        res.append(s)
-    return res
+def run_experiment():
+    adekvat = False
+    odnorid = False
 
+    global average_y
+    global matrix
+    global dispersion_b2
+    global student_lst
+    global d
+    global q
+    global m
+    global f3
 
-def kriteriy_cochrena(y, y_aver, n, m):
-    S_kv = s_kv(y, y_aver, n, m)
-    Gp = max(S_kv) / sum(S_kv)
-    print('\nПеревірка за критерієм Кохрена')
-    return Gp
+    while not adekvat:
+        matrix_y = generate_matrix()
+        average_x = find_average(matrix_x, 0)
+        average_y = find_average(matrix_y, 1)
+        matrix = [(matrix_x[i] + matrix_y[i]) for i in range(N)]
+        mx_i = average_x
+        my = sum(average_y) / 15
 
+        unknown = [
+            [1, mx_i[0], mx_i[1], mx_i[2], mx_i[3], mx_i[4],
+                mx_i[5], mx_i[6], mx_i[7], mx_i[8], mx_i[9]],
+            [mx_i[0], a(1, 1), a(1, 2), a(1, 3), a(1, 4), a(1, 5),
+             a(1, 6), a(1, 7), a(1, 8), a(1, 9), a(1, 10)],
+            [mx_i[1], a(2, 1), a(2, 2), a(2, 3), a(2, 4), a(2, 5),
+             a(2, 6), a(2, 7), a(2, 8), a(2, 9), a(2, 10)],
+            [mx_i[2], a(3, 1), a(3, 2), a(3, 3), a(3, 4), a(3, 5),
+             a(3, 6), a(3, 7), a(3, 8), a(3, 9), a(3, 10)],
+            [mx_i[3], a(4, 1), a(4, 2), a(4, 3), a(4, 4), a(4, 5),
+             a(4, 6), a(4, 7), a(4, 8), a(4, 9), a(4, 10)],
+            [mx_i[4], a(5, 1), a(5, 2), a(5, 3), a(5, 4), a(5, 5),
+             a(5, 6), a(5, 7), a(5, 8), a(5, 9), a(5, 10)],
+            [mx_i[5], a(6, 1), a(6, 2), a(6, 3), a(6, 4), a(6, 5),
+             a(6, 6), a(6, 7), a(6, 8), a(6, 9), a(6, 10)],
+            [mx_i[6], a(7, 1), a(7, 2), a(7, 3), a(7, 4), a(7, 5),
+             a(7, 6), a(7, 7), a(7, 8), a(7, 9), a(7, 10)],
+            [mx_i[7], a(8, 1), a(8, 2), a(8, 3), a(8, 4), a(8, 5),
+             a(8, 6), a(8, 7), a(8, 8), a(8, 9), a(8, 10)],
+            [mx_i[8], a(9, 1), a(9, 2), a(9, 3), a(9, 4), a(9, 5),
+             a(9, 6), a(9, 7), a(9, 8), a(9, 9), a(9, 10)],
+            [mx_i[9], a(10, 1), a(10, 2), a(10, 3), a(10, 4), a(10, 5),
+             a(10, 6), a(10, 7), a(10, 8), a(10, 9), a(10, 10)]
+        ]
 
-# оцінки коефіцієнтів
-def bs(x, y, y_aver, n):
-    res = [sum(1 * y for y in y_aver) / n]
-    for i in range(3):  # 4 - ксть факторів
-        b = sum(j[0] * j[1] for j in zip(x[:, i], y_aver)) / n
-        res.append(b)
-    return res
+        known = [my, find_known(1), find_known(2), find_known(3),
+                 find_known(4), find_known(5), find_known(6), find_known(7),
+                 find_known(8), find_known(9), find_known(10)]
 
+        beta = solve(unknown, known)
+        print("Отримане рівняння регресії")
+        print("{:.3f} + {:.3f} * X1 + {:.3f} * X2 + {:.3f} * X3 + {:.3f} * Х1X2 + {:.3f} * Х1X3 + {:.3f} * Х2X3"
+              "+ {:.3f} * Х1Х2X3 + {:.3f} * X11^2 + {:.3f} * X22^2 + {:.3f} * X33^2 = ŷ\n\tПеревірка"
+              .format(beta[0], beta[1], beta[2], beta[3], beta[4], beta[5],
+                      beta[6], beta[7], beta[8], beta[9], beta[10]))
+        for i in range(N):
+            print("ŷ{} = {:.3f} ≈ {:.3f}".format(
+                (i + 1), check_result(beta, i), average_y[i]))
 
-def kriteriy_studenta(x, y, y_aver, n, m):
-    S_kv = s_kv(y, y_aver, n, m)
-    s_kv_aver = sum(S_kv) / n
+        while not odnorid:
+            print("Матриця планування експеременту:")
+            print("      X1           X2           X3          X1X2        X1X3         X2X3         X1X2X3       X1X1"
+                  "         X2X2         X3X3          Yi ->")
+            for row in range(N):
+                print(end=' ')
+                for column in range(len(matrix[0])):
+                    print("{:^12.3f}".format(matrix[row][column]), end=' ')
+                print("")
 
-    # статиcтична оцінка дисперсії
-    s_Bs = (s_kv_aver / n / m) ** 0.5
-    Bs = bs(x, y, y_aver, n)
-    ts = [abs(B) / s_Bs for B in Bs]
+            dispersion_y = [0.0 for x in range(N)]
+            for i in range(N):
+                dispersion_i = 0
+                for j in range(m):
+                    dispersion_i += (matrix_y[i][j] - average_y[i]) ** 2
+                dispersion_y.append(dispersion_i / (m - 1))
+            f1 = m - 1
+            f2 = N
+            f3 = f1 * f2
+            q = 1 - p
+            Gp = max(dispersion_y) / sum(dispersion_y)
+            print("Критерій Кохрена:")
+            Gt = Perevirku.get_cohren_value(f2, f1, q)
+            if Gt > Gp:
+                print(
+                    "Дисперсія однорідна при рівні значимості {:.2f}.".format(q))
+                odnorid = True
+            else:
+                print(
+                    "Дисперсія не однорідна при рівні значимості {:.2f}! Збільшуємо m.".format(q))
+                m += 1
 
-    return ts
+        dispersion_b2 = sum(dispersion_y) / (N * N * m)
+        student_lst = list(student_test(beta))
+        print("Отримане рівняння регресії з урахуванням критерія Стьюдента")
+        print("{:.3f} + {:.3f} * X1 + {:.3f} * X2 + {:.3f} * X3 + {:.3f} * Х1X2 + {:.3f} * Х1X3 + {:.3f} * Х2X3"
+              "+ {:.3f} * Х1Х2X3 + {:.3f} * X11^2 + {:.3f} * X22^2 + {:.3f} * X33^2 = ŷ\n\tПеревірка"
+              .format(student_lst[0], student_lst[1], student_lst[2],
+                      student_lst[3], student_lst[4], student_lst[5],
+                      student_lst[6], student_lst[7], student_lst[8],
+                      student_lst[9], student_lst[10]))
+        for i in range(N):
+            print("ŷ{} = {:.3f} ≈ {:.3f}".format(
+                (i + 1), check_result(student_lst, i), average_y[i]))
 
+        print("Критерій Фішера")
+        d = 11 - student_lst.count(0)
+        if fisher_test():
+            print("Рівняння регресії адекватне  оригіналу")
+            adekvat = True
+        else:
+            print(
+                "Рівняння регресії неадекватне  оригіналу\n\tПроводимо експеремент повторно")
 
-def kriteriy_fishera(y, y_aver, y_new, n, m, d):
-    S_ad = m / (n - d) * sum([(y_new[i] - y_aver[i])**2 for i in range(len(y))])
-    S_kv = s_kv(y, y_aver, n, m)
-    S_kv_aver = sum(S_kv) / n
-
-    return S_ad / S_kv_aver
-
-
-def cohren(f1, f2, q=0.05):
-    q1 = q / f1
-    fisher_value = f.ppf(q=1 - q1, dfn=f2, dfd=(f1 - 1) * f2)
-    return fisher_value / (fisher_value + f1 - 1)
-
-
-def main(n, m):
-    f1 = m - 1
-    f2 = n
-    f3 = f1 * f2
-    q = 0.05
-
-    ### табличні значення
-    student = partial(t.ppf, q=1-0.025)
-    t_student = student(df=f3)
-
-    G_kr = cohren(f1, f2)
-
-    x, y, x_norm = plan_matrix(n, m)
-    y_aver = [round(sum(i) / len(i), 2) for i in y]
-
-    B = find_coefficient(x, y_aver, n)
-
-    Gp = kriteriy_cochrena(y, y_aver, n, m)
-    print(f'Gp = {Gp}')
-    if Gp < G_kr:
-        print(f'З ймовірністю {1-q} дисперсії однорідні.')
-    else:
-        print("Необхідно збільшити ксть дослідів")
-        m += 1
-        main(n, m)
-
-    ts = kriteriy_studenta(x_norm[:, 1:], y, y_aver, n, m)
-    print('\nКритерій Стьюдента:\n', ts)
-    res = [t for t in ts if t > t_student]
-    final_k = [B[ts.index(i)] for i in ts if i in res]
-    print('Коефіцієнти {} статистично незначущі, тому ми виключаємо їх з рівняння.'.format([i for i in B if i not in final_k]))
-
-    y_new = []
-    for j in range(n):
-        y_new.append(regression([x[j][ts.index(i)] for i in ts if i in res], final_k))
-
-    print(f'\nЗначення "y" з коефіцієнтами {final_k}')
-    print(y_new)
-
-    d = len(res)
-    f4 = n - d
-    F_p = kriteriy_fishera(y, y_aver, y_new, n, m, d)
-
-    fisher = partial(f.ppf, q=1 - 0.05)
-    f_t = fisher(dfn=f4, dfd=f3)  # табличне знач
-
-    print('\nПеревірка адекватності за критерієм Фішера')
-    print('Fp =', F_p)
-    print('F_t =', f_t)
-    if F_p < f_t:
-        print('Математична модель адекватна експериментальним даним')
-    else:
-        print('Математична модель не адекватна експериментальним даним')
+    return adekvat
 
 
 if __name__ == '__main__':
-    main(4, 4)  # 124 стрічка ми реалізуємо функцію main та передаємо їй 2 аргументи: n і m
-    # m –  кількість вимірів y за однією й тією ж самою комбінації факторів
-    # n – кількість експериментів (рядків матриці планування)
-    # на 180 ми викликаємо цю функцію та передаємо значення цих аргументів як 4 і 4
+    start = time.time()
+    cnt = 0
+    adekvat = 0
+
+    while (time.time() - start) <= 10:
+        cnt += 1
+
+        try:
+            adekvat += run_experiment()
+        except Exception:
+            continue
+
+    print(f'За 10 сек експеремент був адекватним {adekvat} разів з {cnt}')
